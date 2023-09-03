@@ -1,0 +1,25 @@
+// Pin Definitions
+const int pirPin = 2;     // PIR sensor output connected to pin 2
+const int relayPin = 3;   // Relay control pin connected to pin 3
+
+void setup() {
+  pinMode(pirPin, INPUT);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW);  // Relay is off initially
+  Serial.begin(9600);
+}
+
+void loop() {
+  int pirState = digitalRead(pirPin);
+
+  if (pirState == HIGH) {
+    // Motion detected, turn on the motor through the relay
+    digitalWrite(relayPin, HIGH);
+    Serial.println("Motion detected! Motor turned on.");
+    delay(5000);  // Motor runs for 5 seconds
+    digitalWrite(relayPin, LOW);
+    Serial.println("Motor turned off.");
+  }
+
+  delay(100);  // Add a short delay to avoid false triggering due to noise
+}

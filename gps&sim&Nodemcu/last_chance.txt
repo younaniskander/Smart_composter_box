@@ -1,0 +1,114 @@
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
+#include <Adafruit_FONA.h>
+
+// SoftwareSerial pins for SIM800L
+const int SIM800L_RX = D2; // RX pin on SIM800L module
+const int SIM800L_TX = D1; // TX pin on SIM800L module
+
+SoftwareSerial sim800lSerial(SIM800L_RX, SIM800L_TX);
+
+// Pins for the relay module
+const int RELAY_PIN = D5;
+
+// Define your phone number
+const char* PHONE_NUMBER = "Your_Phone_Number";
+
+// Create objects
+TinyGPSPlus gps;
+Adafruit_FONA sim800l;
+
+void setup() {
+  // Initialize Serial and wait for it to become available
+  Serial.begin(115200);
+  while (!Serial);
+
+  // Initialize SoftwareSerial for SIM800L
+  sim800lSerial.begin(9600);
+
+  // Initialize SIM800L
+  if (!sim800l.begin(sim800lSerial)) {
+    Serial.println("Couldn't find SIM800L module.");
+    while (1);
+  }
+
+  // Initialize relay pin
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
+
+  Serial.println("System initialized. Send 'send location' to get GPS location.");
+}
+
+void loop() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      processCommand();
+    }
+  }
+
+  // Check for GPS data
+  while (sim800lSerial.available()) {
+    if (gps.encode(sim800lSerial.read())) {
+      if (gps.location.isValid()) {
+        Serial.print("Latitude: ");
+        Serial.println(gps.location.lat(), 6);
+        Serial.print("Longitude: ");
+        Serial.println(gps.location.lng(), 6);
+      }
+    }
+  }
+}
+
+void processCommand() {
+  String command = Serial.readStringUntil('\n');
+  command.trim();
+  command.toLowerCase();
+
+  if (command == "send location") {
+    requestGPSLocation();
+  } else if (command == "motor on") {
+    digitalWrite(RELAY_PIN, HIGH); // Turn on the motor
+    Serial.println("Motor turned ON.");
+  } else if (command == "motor off") {
+    digitalWrite(RELAY_PIN, LOW); // Turn off the motor
+    Serial.println("Motor turned OFF.");
+  } else {
+    Serial.println("Invalid command.");
+  }
+}
+
+void requestGPSLocation() {
+  sim800lSerial.println("AT+CGPSPWR=1"); // Turn on GPS module
+  delay(1000);
+  sim800lSerial.println("AT+CGPSINF=0"); // Request GPS info
+  delay(1000);
+  sim800lSerial.println("AT+CGPSPWR=0"); // Turn off GPS module
+
+  if (gps.location.isValid()) {
+    // Create a Google Maps link with the GPS coordinates
+    String googleMapsLink = "https://maps.google.com/maps?q=loc:";
+    googleMapsLink += gps.location.lat(), 6;
+    googleMapsLink += ",";
+    googleMapsLink += gps.location.lng(), 6;
+
+    // Send an SMS with the Google Maps link
+    sendSMS(PHONE_NUMBER, googleMapsLink);
+
+    Serial.println("GPS location sent via SMS.");
+  } else {
+    Serial.println("GPS data not available.");
+  }
+}
+
+void sendSMS(const char* phoneNumber, const String& message) {
+  sim800lSerial.println("AT+CMGF=1"); // Set SMS text mode
+  delay(1000);
+  sim800lSerial.print("AT+CMGS=\"");
+  sim800lSerial.print(phoneNumber);
+  sim800lSerial.println("\"");
+  delay(1000);
+  sim800lSerial.print(message);
+  sim800lSerial.write(0x1A); // Send CTRL+Z to end the message
+  delay(1000);
+}
